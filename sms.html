@@ -70,7 +70,7 @@
 
         // Load dataset
         async function loadDatasetFromURL(url) {
-            const response = await fetch('spam.csv');
+            const response = await fetch('https://raw.githubusercontent.com/Dwarkesh-Khairnar/Sms_spam_find/main/spam.csv');
             const text = await response.text();
             const lines = text.split("\n").filter(l => l.trim().length > 0);
             texts = [];
@@ -175,5 +175,6 @@
         }
     </script>
 </body>
+
 
 </html>
