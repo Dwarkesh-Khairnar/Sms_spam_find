@@ -1,0 +1,179 @@
+!
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Simple SMS Spam Classifier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.14.0/dist/tf.min.js"></script>
+</head>
+
+<body class="bg-gradient-to-br from-indigo-100 to-white min-h-screen flex flex-col items-center justify-center p-6">
+        <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-xl border border-indigo-100">
+            <h1 class="text-3xl font-extrabold mb-6 text-center text-indigo-700 tracking-tight">📩 SMS Spam Detector</h1>
+    
+            <p id="status" class="text-sm text-gray-500 text-center mb-4"></p>
+    
+            <!-- Input message -->
+            <textarea id="testMsg" rows="4" placeholder="Type a message..."
+                class="w-full border border-gray-300 rounded-lg p-4 mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"></textarea>
+            
+            <button id="predictBtn"
+                class="w-full px-6 py-3 bg-green-500 text-white font-medium rounded-lg hover:bg-green-600 transition">
+                Predict
+            </button>
+    
+            <p id="result" class="text-xl font-semibold text-center text-gray-800 mt-4"></p>
+        </div>
+    
+        <p id="p1" class="grid mt-6 text-center text-sm text-gray-500"></p>
+        
+        <button class="px-5 py-2 bg-green-500 mt-4 text-white rounded-lg hover:bg-green-600 transition"
+            onclick="showeg()">See Example</button>
+    
+    <script>
+        let texts = [], labels = [];
+        let vocab = [], vocabIndex = new Map();
+        let model;
+
+        // Clean + tokenize
+        function cleanText(str) {
+            return str.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
+        }
+        function tokenize(str) {
+            return cleanText(str).split(/\s+/).filter(Boolean);
+        }
+
+        // Build vocabulary
+        function buildVocabulary(texts, maxWords = 2000) {
+            const freq = {};
+            texts.forEach(t => tokenize(t).forEach(tok => {
+                freq[tok] = (freq[tok] || 0) + 1;
+            }));
+            vocab = Object.keys(freq).sort((a, b) => freq[b] - freq[a]).slice(0, maxWords);
+            vocabIndex = new Map(vocab.map((w, i) => [w, i]));
+        }
+
+        // Convert texts → TF-IDF-like vectors
+        function vectorize(texts) {
+            return texts.map(t => {
+                const vec = new Float32Array(vocab.length);
+                const toks = tokenize(t);
+                toks.forEach(tok => {
+                    const idx = vocabIndex.get(tok);
+                    if (idx !== undefined) vec[idx]++;
+                });
+                return vec;
+            });
+        }
+
+        // Load dataset
+        async function loadDatasetFromURL(url) {
+            const response = await fetch('spam.csv');
+            const text = await response.text();
+            const lines = text.split("\n").filter(l => l.trim().length > 0);
+            texts = [];
+            labels = [];
+            lines.forEach((line, i) => {
+                if (i === 0 && line.toLowerCase().includes("v1")) return; // skip header
+                const [label, msg] = line.split(",", 2);
+                if (!msg) return;
+                texts.push(msg);
+                labels.push(label.trim().toLowerCase() === "spam" ? 1 : 0);
+            });
+        }
+
+
+        // Build logistic regression model
+        function buildModel(inputDim) {
+            const m = tf.sequential();
+            m.add(tf.layers.dense({ inputShape: [inputDim], units: 1, activation: "sigmoid" }));
+            m.compile({ optimizer: tf.train.adam(0.01), loss: "binaryCrossentropy", metrics: ["accuracy"] });
+            return m;
+        }
+
+        // Train
+        async function train(auto = false) {
+            let file;
+            if (!auto) {
+                file = document.getElementById("fileInput").files[0];
+                if (!file) { alert("Please select a dataset CSV file!"); return; }
+            }
+
+            document.getElementById("status").innerText = "📥 Loading dataset...";
+
+            if (auto) {
+                await loadDatasetFromURL('spam.csv');
+            } else {
+                await loadDataset(file);
+            }
+
+            buildVocabulary(texts);
+            const X = tf.tensor2d(vectorize(texts));
+            const y = tf.tensor2d(labels, [labels.length, 1]);
+
+            model = buildModel(vocab.length);
+            document.getElementById("status").innerText = "🚀 Training model...";
+            await model.fit(X, y, { epochs: 5, batchSize: 32, validationSplit: 0.1 });
+
+            X.dispose(); y.dispose();
+            document.getElementById("status").innerText = "✅ Training complete!";
+        }
+
+
+        // Predict
+        function predictMessage(msg) {
+            const vec = vectorize([msg])[0];
+            const x = tf.tensor2d([vec]);
+            const p = model.predict(x).dataSync()[0];
+            x.dispose();
+            return p;
+        }
+
+        // Auto load mode
+        window.addEventListener("DOMContentLoaded", async () => {
+            document.getElementById("status").innerText = "📥 Loading and training...";
+            await train(true); // auto mode
+        });
+        document.getElementById("predictBtn").onclick = () => {
+            document.getElementById("status").innerText = "";
+            const msg = document.getElementById("testMsg").value;
+            if (!msg) return;
+            const p = predictMessage(msg);
+            document.getElementById("result").innerText =
+                `Prediction: ${(p > 0.5 ? "🚨 SPAM" : "✅ HAM")} (score=${p.toFixed(3)})`;
+        };
+
+        function showeg() {
+            let aerr = ['Spam 🚨', 'Congratulations! Youve won a free cruise. Call now!', `<br>`,
+                'You’ve been selected for a $1000 Walmart gift card. Click here!', `<br>`,
+                'URGENT! Your account has been suspended. Click this link to reactivate.', `<br>`,
+                'You won a free iPhone! Just enter your info now.', `<br>`,
+                'Final notice: Your loan has been approved. Apply now!',
+                `<br><br>`,
+                'HAM ✅', ' Hey, are we still meeting for lunch today?', `<br>`,
+                'Can you send me the report by tonight?', `<br>`,
+                'Don’t forget the meeting at 10am tomorrow.', `<br>`,
+                'What time are you coming home?', `<br>`,
+                'Let’s catch up sometime this weekend.', `<br>`,
+                'I ll be late — stuck in traffic.', `<br>`,
+                'Did you talk to Sarah about the presentation?', `<br>`,
+                'Don`t worry, I already picked up the groceries.', `<br>`,
+                'Let s meet at the usual coffee shop.', `<br>`,
+                'Thanks for the reminder! I ll be there.',
+                `
+    <button class="px-6 py-2 bg-green-500 mt-3 w-10 text-white rounded " onclick="hiddeg()"> hide Eg</button>`
+
+            ]
+            document.getElementById('p1').innerHTML = aerr;
+        }
+
+        function hiddeg() {
+            document.getElementById('p1').innerHTML = '';
+
+        }
+    </script>
+</body>
+
+</html>
