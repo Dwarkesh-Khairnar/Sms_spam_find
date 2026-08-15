@@ -1,5 +1,9 @@
 # sms spam finder
 
+### Tech
+ - html
+ - css
+ - js
 
 
 try it self:
