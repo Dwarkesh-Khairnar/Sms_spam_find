@@ -1,4 +1,4 @@
-# sms spam finder
+# Sms spam finder
 
 ### Tech
  - html
