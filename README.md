@@ -6,7 +6,7 @@
  - js
    
 ### Packeges
- - TF.js
+ - TF.js (CDN)
 ### Freamworks
  - Bootstrap
  - node
