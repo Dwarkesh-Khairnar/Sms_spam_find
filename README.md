@@ -8,7 +8,7 @@
 ### Packeges
  - TF.js (CDN)
 ### Freamworks
- - Bootstrap
+ - Bootstrap framework 
  - node
 
 
